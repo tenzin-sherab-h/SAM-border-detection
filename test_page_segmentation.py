@@ -47,7 +47,8 @@ boxes, logits, phrases = predict(
     image=image,
     caption=TEXT_PROMPT,
     box_threshold=BOX_THRESHOLD,
-    text_threshold=TEXT_THRESHOLD
+    text_threshold=TEXT_THRESHOLD,
+    device=DEVICE
 )
 
 if len(boxes) == 0:

@@ -53,12 +53,12 @@ page-border-detection/
 ├── test_page_segmentation.py
 ├── requirements.txt
 ├── README.md
-├── GroundingDINO/
-└── segment-anything/
+├── GroundingDINO/          (git submodule)
+└── segment-anything/      (git submodule)
 ```
 
-`GroundingDINO` and `segment-anything` are **local clones**, not pip-installed
-packages.
+`GroundingDINO` and `segment-anything` are included as **git submodules**, not
+pip-installed packages.
 
 ---
 
@@ -79,20 +79,25 @@ pip install -r requirements.txt
 
 ---
 
-## External Repositories (Required)
+## External Repositories (Git Submodules)
 
-Clone the following repositories into the project root:
+This project uses the following repositories as **git submodules**:
 
-### GroundingDINO
+- GroundingDINO  
+  https://github.com/IDEA-Research/GroundingDINO
+- Segment Anything  
+  https://github.com/facebookresearch/segment-anything
+
+When cloning this repository, initialize submodules:
 
 ```bash
-git clone https://github.com/IDEA-Research/GroundingDINO.git
+git clone --recurse-submodules https://github.com/YOUR_USERNAME/page-border-detection.git
 ```
 
-### Segment Anything
+If you already cloned without submodules, run:
 
 ```bash
-git clone https://github.com/facebookresearch/segment-anything.git
+git submodule update --init --recursive
 ```
 
 ---
@@ -141,5 +146,3 @@ Outputs:
 - No cloud services are used
 - Designed for automation and batch processing
 - Works on text-heavy and light-text pages
-
----
