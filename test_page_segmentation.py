@@ -21,6 +21,7 @@ TEXT_PROMPT = "page"
 BOX_THRESHOLD = 0.3
 TEXT_THRESHOLD = 0.25
 BOX_PADDING_RATIO = 0.02
+SAVE_OVERLAY = True  # debug/QA output; disable when integrating with Node app
 
 # -----------------------------
 # LOAD MODELS
@@ -179,20 +180,15 @@ else:
 refined_mask = page_mask.astype(bool)
 
 # -----------------------------
-# VISUALIZE RESULT
+# OPTIONAL VISUAL DEBUG OUTPUT
 # -----------------------------
-overlay = image_source.copy()
-overlay[refined_mask] = (
-    overlay[refined_mask] * 0.5 + np.array([255, 0, 0]) * 0.5
-)
-
-cv2.imwrite(
-    "mask_overlay.png",
-    cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR)
-)
-cv2.imwrite(
-    "mask_binary.png",
-    page_mask
-)
-
-print("Saved: mask_overlay.png and mask_binary.png")
+if SAVE_OVERLAY:
+    overlay = image_source.copy()
+    overlay[refined_mask] = (
+        overlay[refined_mask] * 0.5 + np.array([255, 0, 0]) * 0.5
+    )
+    cv2.imwrite(
+        "mask_overlay.png",
+        cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR)
+    )
+    print("Saved: mask_overlay.png")
