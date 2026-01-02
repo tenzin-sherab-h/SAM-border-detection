@@ -10,7 +10,7 @@ from segment_anything import sam_model_registry, SamPredictor
 # -----------------------------
 # CONFIG
 # -----------------------------
-DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 
 DINO_CONFIG = "GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"
 DINO_WEIGHTS = "GroundingDINO/weights/groundingdino_swint_ogc.pth"
