@@ -4,7 +4,15 @@ Local, privacy-preserving pipeline for detecting full physical page boundaries f
 
 ---
 
-## Overview (Algorithm is unchanged)
+## Requirements
+
+- Python 3.8+ (tested with Python 3.10)
+- CUDA-capable GPU (optional, CPU mode supported)
+- ~10GB disk space for models and dependencies
+
+---
+
+## Overview
 
 Two-stage detection:
 1) **GroundingDINO** for coarse localization (`"page"` prompt)  
@@ -44,27 +52,75 @@ The algorithm matches the original `test_page_segmentation.py`: DINO → SAM →
 
 ## Setup
 
-Create a virtual environment and install deps:
+### 1. Clone the repository with submodules
+
 ```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+git clone --recursive https://github.com/tenzin-sherab-h/SAM-border-detection.git
+cd <repo_name>
 ```
 
-Initialize submodules (if not already):
+If you've already cloned without `--recursive`, initialize submodules:
 ```bash
 git submodule update --init --recursive
 ```
 
+### 2. Create virtual environment and install dependencies
+
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 3. Install submodules
+
+**GroundingDINO:**
+```bash
+cd GroundingDINO
+pip install -e .
+cd ..
+```
+
+**Note:** If you have CUDA and encounter compilation errors, ensure `CUDA_HOME` is set:
+```bash
+export CUDA_HOME=/path/to/cuda  # e.g., /usr/local/cuda
+```
+
+**Segment Anything:**
+```bash
+cd segment-anything
+pip install -e .
+cd ..
+```
+
+### 4. Download model weights
+
+**GroundingDINO:**
+```bash
+mkdir -p GroundingDINO/weights
+cd GroundingDINO/weights
+wget https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
+cd ../..
+```
+
+**Segment Anything:**
+```bash
+mkdir -p segment-anything/checkpoints
+cd segment-anything/checkpoints
+wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+cd ../..
+```
+
 ---
 
-## Model Weights (Manual Download)
+## Quick Start
 
-GroundingDINO:
-- `groundingdino_swint_ogc.pth` → `GroundingDINO/weights/groundingdino_swint_ogc.pth`
+Test the installation with a single image:
 
-Segment Anything:
-- `sam_vit_h_4b8939.pth` → `segment-anything/checkpoints/sam_vit_h_4b8939.pth`
+```bash
+# Place your test image as sample_page.jpg in the repo root
+python test_page_segmentation.py
+```
 
 ---
 
@@ -122,7 +178,6 @@ python tools/visualize_boundaries.py \
   --job test_jobs/job_001 \
   --out test_jobs/job_001/overlays \
   --sample 3 \
-  --seed 42   # optional for reproducibility
 ```
 
 Notes:
@@ -146,6 +201,23 @@ spawn(PYTHON_BIN, ["-m", "service.batch_runner", "--input", "...", "--output", "
 ```
 
 The detector returns polygons. If your UI expects boxes, derive a box from the polygon points client-side; otherwise render the polygon directly.
+
+---
+
+## Troubleshooting
+
+**CUDA compilation errors with GroundingDINO:**
+- Ensure `CUDA_HOME` environment variable is set correctly
+- Check that your CUDA version matches your PyTorch installation
+- See [GroundingDINO README](GroundingDINO/README.md) for detailed CUDA setup instructions
+
+**Import errors:**
+- Ensure submodules are initialized: `git submodule update --init --recursive`
+- Ensure submodules are installed: `pip install -e .` in each submodule directory
+
+**Model not found errors:**
+- Verify model weights are downloaded to the correct paths
+- Check file sizes: GroundingDINO (~500MB), SAM (~2.4GB)
 
 ---
 

@@ -1,15 +1,17 @@
-torch>=2.0
-torchvision
-numpy
-opencv-python
-Pillow
-matplotlib
-tqdm
-pyyaml
-transformers
-addict
-timm
-termcolor
-requests
-huggingface_hub
-supervision
+# Core ML frameworks
+torch>=2.0.0,<3.0.0
+torchvision>=0.15.0
+
+# Image processing
+opencv-python>=4.5.0
+numpy>=1.21.0
+
+# GroundingDINO dependencies
+transformers>=4.20.0
+addict>=2.4.0
+timm>=0.6.0
+supervision>=0.22.0
+
+# GroundingDINO internal dependencies (not in their requirements.txt but needed)
+pyyaml>=6.0
+termcolor>=2.0.0
