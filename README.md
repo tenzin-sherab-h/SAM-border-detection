@@ -69,6 +69,7 @@ git submodule update --init --recursive
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install --upgrade pip  # Ensure pip is up to date
 pip install -r requirements.txt
 ```
 
@@ -77,9 +78,11 @@ pip install -r requirements.txt
 **GroundingDINO:**
 ```bash
 cd GroundingDINO
-pip install -e .
+pip install -e . --no-build-isolation
 cd ..
 ```
+
+**Important:** The `--no-build-isolation` flag is required because GroundingDINO's setup.py imports torch during the build process, and pip's default build isolation doesn't have access to packages installed in your virtual environment.
 
 **Note:** If you have CUDA and encounter compilation errors, ensure `CUDA_HOME` is set:
 ```bash
@@ -99,11 +102,27 @@ cd ..
 ```bash
 mkdir -p GroundingDINO/weights
 cd GroundingDINO/weights
+curl -L -o groundingdino_swint_ogc.pth https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
+cd ../..
+```
+
+**Alternative (Linux with wget):**
+```bash
+mkdir -p GroundingDINO/weights
+cd GroundingDINO/weights
 wget https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
 cd ../..
 ```
 
 **Segment Anything:**
+```bash
+mkdir -p segment-anything/checkpoints
+cd segment-anything/checkpoints
+curl -L -o sam_vit_h_4b8939.pth https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+cd ../..
+```
+
+**Alternative (Linux with wget):**
 ```bash
 mkdir -p segment-anything/checkpoints
 cd segment-anything/checkpoints
@@ -211,9 +230,14 @@ The detector returns polygons. If your UI expects boxes, derive a box from the p
 - Check that your CUDA version matches your PyTorch installation
 - See [GroundingDINO README](GroundingDINO/README.md) for detailed CUDA setup instructions
 
+**"No module named 'torch'" error when installing GroundingDINO:**
+- Ensure you've installed `requirements.txt` first (step 2)
+- Use `pip install -e . --no-build-isolation` instead of just `pip install -e .`
+- This is required because GroundingDINO's setup.py needs torch available during build
+
 **Import errors:**
 - Ensure submodules are initialized: `git submodule update --init --recursive`
-- Ensure submodules are installed: `pip install -e .` in each submodule directory
+- Ensure submodules are installed: `pip install -e .` (with `--no-build-isolation` for GroundingDINO)
 
 **Model not found errors:**
 - Verify model weights are downloaded to the correct paths
