@@ -7,9 +7,6 @@ import torch
 from groundingdino.util.inference import load_model, predict, load_image
 from segment_anything import sam_model_registry, SamPredictor
 
-# -----------------------------
-# CONFIG
-# -----------------------------
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 
 DINO_CONFIG = "GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"
@@ -23,9 +20,9 @@ BOX_THRESHOLD = 0.3
 TEXT_THRESHOLD = 0.25
 BOX_PADDING_RATIO = 0.02
 
-# -----------------------------
-# LOAD MODELS ONCE
-# -----------------------------
+MIN_CONFIDENCE = 0.35
+MIN_AREA_RATIO = 0.2
+
 print("Loading GroundingDINO...")
 _dino_model = load_model(DINO_CONFIG, DINO_WEIGHTS)
 
@@ -51,21 +48,7 @@ def _hull_to_polygon(hull: np.ndarray) -> List[List[float]]:
     pts = hull.reshape(-1, 2).astype(float)
     return pts.tolist()
 
-
-def detect_page_boundary(image_path: Path) -> Dict[str, Any]:
-    """
-    Runs page boundary detection on a single image.
-    Returns a JSON-serializable dict:
-      {
-        "image": "<filename>",
-        "boundary": {
-          "type": "polygon",
-          "points": [[x1, y1], [x2, y2], ...]
-        },
-        "confidence": <float>,
-        "source": "auto"
-      }
-    """
+def detect_page_boundary(image_path: Path, multi_page: bool = False) -> Dict[str, Any]:
     if not image_path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
 
@@ -86,32 +69,75 @@ def detect_page_boundary(image_path: Path) -> Dict[str, Any]:
             raise RuntimeError("No page detected")
 
         pixel_boxes = _box_to_pixel(boxes, w, h)
+        areas = (pixel_boxes[:, 2] - pixel_boxes[:, 0]) * (pixel_boxes[:, 3] - pixel_boxes[:, 1])
 
-        areas = (pixel_boxes[:, 2] - pixel_boxes[:, 0]) * (
-            pixel_boxes[:, 3] - pixel_boxes[:, 1]
-        )
-        box = pixel_boxes[np.argmax(areas)]
+        if not multi_page:
+            box = pixel_boxes[np.argmax(areas)]
+            confidence = float(logits[np.argmax(areas)])
+            
+            boundary = _process_single_box(box, image_source, w, h, confidence)
+            
+            if boundary is None:
+                raise RuntimeError("Failed to process page boundary")
+            
+            return {
+                "image": image_path.name,
+                "boundary": boundary,
+                "source": "auto",
+            }
+        else:
+            max_area = np.max(areas)
+            boundaries = []
+            
+            sorted_indices = np.argsort(pixel_boxes[:, 1])
+            
+            for idx in sorted_indices:
+                box = pixel_boxes[idx]
+                area = areas[idx]
+                confidence = float(logits[idx])
+                
+                if confidence < MIN_CONFIDENCE:
+                    continue
+                
+                if area < (max_area * MIN_AREA_RATIO):
+                    continue
+                
+                boundary = _process_single_box(box, image_source, w, h, confidence)
+                
+                if boundary is not None:
+                    boundaries.append(boundary)
+            
+            if len(boundaries) == 0:
+                raise RuntimeError("No valid pages detected")
+            
+            return {
+                "image": image_path.name,
+                "boundaries": boundaries,
+                "source": "auto",
+                "page_count": len(boundaries)
+            }
 
-        pad_x = (box[2] - box[0]) * BOX_PADDING_RATIO
-        pad_y = (box[3] - box[1]) * BOX_PADDING_RATIO
+def _process_single_box(box: np.ndarray, image_source: np.ndarray, w: int, h: int, confidence: float) -> Dict[str, Any]:
+    pad_x = (box[2] - box[0]) * BOX_PADDING_RATIO
+    pad_y = (box[3] - box[1]) * BOX_PADDING_RATIO
 
-        box = np.array(
-            [
-                max(0, box[0] - pad_x),
-                max(0, box[1] - pad_y),
-                min(w, box[2] + pad_x),
-                min(h, box[3] + pad_y),
-            ]
-        )
+    padded_box = np.array([
+        max(0, box[0] - pad_x),
+        max(0, box[1] - pad_y),
+        min(w, box[2] + pad_x),
+        min(h, box[3] + pad_y),
+    ])
 
-        _sam_predictor.set_image(image_source)
-        masks, scores, _ = _sam_predictor.predict(box=box, multimask_output=True)
+    _sam_predictor.set_image(image_source)
+    masks, scores, _ = _sam_predictor.predict(box=padded_box, multimask_output=True)
 
     mask = masks[np.argmax(scores)]
-
     mask_uint8 = (mask * 255).astype(np.uint8)
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask_uint8)
+    if num_labels <= 1:
+        return None
+    
     largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
     page_mask = (labels == largest_label).astype(np.uint8) * 255
 
@@ -119,8 +145,10 @@ def detect_page_boundary(image_path: Path) -> Dict[str, Any]:
     page_mask = cv2.erode(page_mask, kernel, iterations=2)
 
     contours, _ = cv2.findContours(page_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) == 0:
+        return None
+    
     page_cnt = max(contours, key=cv2.contourArea)
-
     hull = cv2.convexHull(page_cnt)
     page_mask = np.zeros_like(page_mask)
     cv2.fillConvexPoly(page_mask, hull, 255)
@@ -142,15 +170,15 @@ def detect_page_boundary(image_path: Path) -> Dict[str, Any]:
 
         core_pixels = image_source[inner_core.astype(bool)]
         if len(core_pixels) == 0:
-            raise RuntimeError("No paper pixels available after core extraction")
+            return None
 
         paper_mean = np.median(core_pixels, axis=0)
         paper_mad = np.median(np.abs(core_pixels - paper_mean), axis=0) + 1e-5
         paper_std = 1.4826 * paper_mad
 
         dist = np.linalg.norm((image_source - paper_mean) / paper_std, axis=2)
-
         color_mask = (dist < 2.6).astype(np.uint8) * 255
+        
         core_gray = gray[inner_core.astype(bool)]
         gray_thresh = max(0, int(core_gray.mean() - 12)) if len(core_gray) else 0
         bright_mask = (gray >= gray_thresh).astype(np.uint8) * 255
@@ -160,7 +188,7 @@ def detect_page_boundary(image_path: Path) -> Dict[str, Any]:
     else:
         paper_pixels = image_source[page_mask_clean.astype(bool)]
         if len(paper_pixels) == 0:
-            raise RuntimeError("No paper pixels available after hull refinement")
+            return None
 
         paper_mean = paper_pixels.mean(axis=0)
         paper_std = paper_pixels.std(axis=0) + 1e-5
@@ -175,23 +203,23 @@ def detect_page_boundary(image_path: Path) -> Dict[str, Any]:
 
     refined_mask = page_mask.astype(bool)
 
-    # Recompute hull on the final refined mask to match original overlay behavior
     final_contours, _ = cv2.findContours(
         (refined_mask.astype(np.uint8) * 255),
         cv2.RETR_EXTERNAL,
         cv2.CHAIN_APPROX_SIMPLE,
     )
+    if len(final_contours) == 0:
+        return None
+    
     final_cnt = max(final_contours, key=cv2.contourArea)
     final_hull = cv2.convexHull(final_cnt)
 
     hull_polygon = _hull_to_polygon(final_hull)
-    confidence = float(np.max(scores))
 
     return {
-        "image": image_path.name,
-        "boundary": {"type": "polygon", "points": hull_polygon},
-        "confidence": confidence,
-        "source": "auto",
+        "type": "polygon",
+        "points": hull_polygon,
+        "confidence": float(confidence)
     }
 
 

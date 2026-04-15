@@ -14,7 +14,7 @@ def _iter_images(input_dir: Path) -> List[Path]:
     )
 
 
-def run_job(input_dir: Path, output_dir: Path) -> Dict[str, int]:
+def run_job(input_dir: Path, output_dir: Path, multi_page: bool = False) -> Dict[str, int]:
     """
     Iterates over images in input_dir.
     For each image:
@@ -38,7 +38,7 @@ def run_job(input_dir: Path, output_dir: Path) -> Dict[str, int]:
         err_path = output_dir / f"{stem}.error.json"
 
         try:
-            result = detect_page_boundary(image_path)
+            result = detect_page_boundary(image_path, multi_page=multi_page)
             with out_path.open("w", encoding="utf-8") as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
             summary["succeeded"] += 1
@@ -59,12 +59,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output", required=True, type=Path, help="Output directory for JSON files"
     )
+    parser.add_argument(
+        "--multi-page", action="store_true", help="Detect multiple pages per image"
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
-    summary = run_job(args.input, args.output)
+    summary = run_job(args.input, args.output, args.multi_page)
     print(json.dumps(summary, indent=2))
 
 
